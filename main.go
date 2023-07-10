@@ -49,7 +49,7 @@ func GetWeatherData(URL string) string {
 	fmt.Println("weather info:", WeatherInfo)
 	log.Info().Msg("Successfully unmarshal data and return it")
 	var result []byte
-	result = fmt.Appendf(result, "The weather in %s is %.2f and can be described as: %s. \n The wind speed is %.2f",
+	result = fmt.Appendf(result, "The weather in *%s* is *%.2f* and can be described as: *%s*. \n The <b>wind speed</b> is %.2f",
 		WeatherInfo.CityName, WeatherInfo.Temperature.CurrentTemperature, WeatherInfo.WeatherDescription[0].OverallDescription, WeatherInfo.WindData.WindSpeed)
 	return string(result)
 }
@@ -93,9 +93,6 @@ func main() {
 		RequestLocation: true,
 	}
 
-	//closeButton := tgbotapi.ReplyKeyboardRemove{
-	//	RemoveKeyboard: true,
-	//}
 	latitude := 0.0
 	longitude := 0.0
 	ok := false
@@ -108,11 +105,23 @@ func main() {
 		}
 
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "")
+		//msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Hello, *this is bold text*, _this is italic text_, [this is a link](https://example.com).")
+		//msg.ParseMode = tgbotapi.ModeHTML
+		////msg.DisableWebPagePreview = true
+		//
+		//_, err = bot.Send(msg)
+		//if err != nil {
+		//	log.Fatal().Err(err)
+		//}
+
 		_, ok = units[update.Message.Text]
 
 		switch {
 		case update.Message.Text == "/start":
+
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, startMessage)
+			msg = tgbotapi.NewMessage(update.Message.Chat.ID, "*Hello!* If you want to proceed, share your location with bot so it can provide you with"+
+				" weather data according to your region.")
 			msg.ReplyMarkup = tgbotapi.NewReplyKeyboard([]tgbotapi.KeyboardButton{locationButton})
 			if _, err := bot.Send(msg); err != nil {
 				log.Panic().Err(err).Msg(" Bot`s keyboard problem")
@@ -138,9 +147,11 @@ func main() {
 			urlWeatherAPI = []byte(os.Getenv("URL"))
 			break
 		case update.Message.Text == "Close":
-			msg = tgbotapi.NewMessage(update.Message.Chat.ID, unitsMessage)
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Closing the reply keyboard...\n Thanks for using me! :)")
 			msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			if _, err = bot.Send(msg); err != nil {
+				log.Panic().Err(err)
+			}
 		}
-
 	}
 }
