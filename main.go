@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/caarlos0/env/v9"
-	"github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
 	"io"
@@ -30,8 +30,8 @@ type WeatherData struct {
 	} `json:"wind"`
 }
 
-var startMessage = "Hello! If you want to proceed, share <u>your location<u> with bot so it can provide you with" +
-	" <b>weather data according to your region.<b>"
+var startMessage = "Hello! If you want to proceed, share <u>your location</u> with bot so it can provide you with" +
+	" <b>weather data according to your region.</b>"
 var unitsMessage = "Choose in which units you need to see weather info:"
 
 func GetWeatherData(URL string, SpeedPerTime string) string {
@@ -55,9 +55,15 @@ func GetWeatherData(URL string, SpeedPerTime string) string {
 	fmt.Println("weather info:", WeatherInfo)
 	log.Info().Msg("Successfully unmarshal data and return it")
 	var result []byte
-	result = fmt.Appendf(result, "The weather in *%s* is *%.2f* and can be described as: *%s*. \n The <b>wind speed</b> is %.2f %s",
+	result = fmt.Appendf(result, "The weather in <b>%s</b> is <b>%.2f</b> and can be described as: <u>%s.</u> \n The wind speed is <b>%.2f %s</b>",
 		WeatherInfo.CityName, WeatherInfo.Temperature.CurrentTemperature, WeatherInfo.WeatherDescription[0].OverallDescription, WeatherInfo.WindData.WindSpeed, SpeedPerTime)
 	return string(result)
+}
+
+func htmlFormat(chatID int64, text string) tgbotapi.MessageConfig {
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = tgbotapi.ModeHTML
+	return msg
 }
 
 var units = map[string]string{
@@ -116,20 +122,12 @@ func main() {
 			continue
 		}
 
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "")
-		//msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Hello, <b>this is bold text</b>, <i>this is italic text</i>, <a href=\"https://example.com\">this is a link</a>.")
-		//
-		//msg.ParseMode = tgbotapi.ModeHTML
-		////msg.DisableWebPagePreview = true
-		//
-		//_, err = bot.Send(msg)
-		//if err != nil {
-		//	log.Fatal().Err(err)
-		//}
+		msg := htmlFormat(update.Message.Chat.ID, "")
+
 		switch update.Message.Text {
 		case "/start":
-			//msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Hello! If you want to proceed, share <u>your location<u> with bot so it can provide you with\" +\n <b>weather data according to your region.<b>")
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, startMessage)
+			msg.ParseMode = tgbotapi.ModeHTML
 			msg.ReplyMarkup = tgbotapi.NewReplyKeyboard([]tgbotapi.KeyboardButton{locationButton})
 			if _, err := bot.Send(msg); err != nil {
 				log.Panic().Err(err).Msg(" Bot`s keyboard problem")
@@ -137,7 +135,7 @@ func main() {
 			log.Info().Msg("User gets msg")
 			break
 		case "Close":
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Closing the reply keyboard...\n Thanks for using me! :)")
+			msg = tgbotapi.NewMessage(update.Message.Chat.ID, "Closing the reply keyboard...\n Thanks for using me! :)")
 			msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 			if _, err = bot.Send(msg); err != nil {
 				log.Panic().Err(err)
@@ -165,8 +163,9 @@ func main() {
 				result = GetWeatherData(string(urlWeatherAPI), "meter/sec")
 			}
 			fmt.Println(string(urlWeatherAPI))
-			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, result))
+			bot.Send(htmlFormat(update.Message.Chat.ID, result))
 			urlWeatherAPI = []byte(cfg.URL)
 		}
+
 	}
 }
