@@ -82,7 +82,7 @@ func main() {
 	}
 	unitsKeyboard[index] = tgbotapi.NewKeyboardButton("Close")
 
-	err := godotenv.Load("variables.env")
+	err := godotenv.Load(".env")
 	if err != nil {
 		log.Panic().Err(err).Msg(" does not load .env")
 	}
