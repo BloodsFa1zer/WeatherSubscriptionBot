@@ -1,64 +1,38 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"github.com/caarlos0/env/v9"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
-	"io"
-	"net/http"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"time"
 )
 
 type Config struct {
 	URL    string `env:"URL_WEATHER"`
 	APIKey string `env:"API_KEY_WEATHER"`
+	URI_BD string `env:"URI_MongoDB"`
 	BotAPI string `env:"BOT_API_KEY"`
-}
-
-type WeatherData struct {
-	Temperature struct {
-		CurrentTemperature float64 `json:"temp"`
-	} `json:"main"`
-	WeatherDescription []struct {
-		OverallDescription string `json:"description"`
-	} `json:"weather"`
-	CityName string `json:"name"`
-	WindData struct {
-		WindSpeed float64 `json:"speed"`
-	} `json:"wind"`
 }
 
 var startMessage = "Hello! If you want to proceed, share <u>your location</u> with bot so it can provide you with" +
 	" <b>weather data according to your region.</b>"
 var unitsMessage = "Choose in which units you need to see weather info:"
+var locationMessage = "Choose option that is more suitable in your certain case."
 
-func GetWeatherData(URL string, SpeedPerTime string) string {
-	var WeatherInfo *WeatherData
-	response, err := http.Get(URL)
-	if err != nil {
-		log.Fatal().Err(err).Msg(" Can`t read a response")
-	}
-	log.Info().Msg("Successfully read and return response")
-
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		log.Panic().Err(err).Msg(" can`t read data")
-	}
-	log.Info().Msg("successfully read data")
-
-	err = json.Unmarshal(body, &WeatherInfo)
-	if err != nil {
-		log.Fatal().Err(err).Msg(" Can`t unmarshal data")
-	}
-	fmt.Println("weather info:", WeatherInfo)
-	log.Info().Msg("Successfully unmarshal data and return it")
-	var result []byte
-	result = fmt.Appendf(result, "The weather in <b>%s</b> is <b>%.2f</b> and can be described as: <u>%s.</u> \n The wind speed is <b>%.2f %s</b>",
-		WeatherInfo.CityName, WeatherInfo.Temperature.CurrentTemperature, WeatherInfo.WeatherDescription[0].OverallDescription, WeatherInfo.WindData.WindSpeed, SpeedPerTime)
-	return string(result)
-}
+var locationKeyboard = tgbotapi.NewReplyKeyboard(
+	tgbotapi.NewKeyboardButtonRow(
+		tgbotapi.NewKeyboardButton("that is your constant location\n(can change it later)"),
+	),
+	tgbotapi.NewKeyboardButtonRow(
+		tgbotapi.NewKeyboardButton("temporary location\n(will need to change it to the constant one)"),
+	),
+)
 
 func htmlFormat(chatID int64, text string) tgbotapi.MessageConfig {
 	msg := tgbotapi.NewMessage(chatID, text)
@@ -95,6 +69,22 @@ func main() {
 		log.Panic().Err(err).Msg(" unable to parse environment variables")
 	}
 	log.Info().Msg("successfully parsed .env")
+
+	client, err := mongo.NewClient(options.Client().ApplyURI(cfg.URI_BD))
+	if err != nil {
+		log.Fatal().Err(err).Msg("can`t add localhost")
+	}
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	err = client.Connect(ctx)
+	if err != nil {
+		log.Fatal().Err(err)
+	}
+	defer client.Disconnect(ctx)
+
+	err = client.Ping(ctx, readpref.Primary())
+	if err != nil {
+		log.Fatal().Err(err)
+	}
 
 	urlWeatherAPI := []byte(cfg.URL)
 	bot, err := tgbotapi.NewBotAPI(cfg.BotAPI)
@@ -144,6 +134,12 @@ func main() {
 		}
 
 		if update.Message.Location != nil {
+			msg = tgbotapi.NewMessage(update.Message.Chat.ID, locationMessage)
+			msg.ReplyMarkup = locationKeyboard
+			if _, err := bot.Send(msg); err != nil {
+				log.Panic().Err(err).Msg(" Bot`s keyboard problem")
+			}
+			log.Info().Msg(" user gets keyboard to choose units")
 			latitude = update.Message.Location.Latitude
 			longitude = update.Message.Location.Longitude
 			log.Info().Msg(" Successfully gets user location")
