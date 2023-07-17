@@ -57,12 +57,8 @@ var units = map[string]string{
 	"Kelvin(default)": "standard",
 }
 
-type Book struct {
-	Title  string
-	Author string
-}
-
 func main() {
+
 	zerolog.TimeFieldFormat = time.TimeOnly
 
 	unitsKeyboard := make([]tgbotapi.KeyboardButton, len(units)+1)
@@ -97,52 +93,6 @@ func main() {
 	}
 
 	usersCollection := client.Database("telegram").Collection("usersID")
-
-	//user := bson.D{{"fullName", "User 1"}, {"age", 30}}
-	//
-	//result, err := usersCollection.InsertOne(context.TODO(), user)
-	//if err != nil {
-	//	panic(err)
-	//}
-	//
-	//users := []interface{}{
-	//	bson.D{{"fullName", "User 2"}, {"age", 25}},
-	//	bson.D{{"fullName", "User 3"}, {"age", 20}},
-	//	bson.D{{"fullName", "User 4"}, {"age", 28}},
-	//}
-	//// insert the bson object slice using InsertMany()
-	//results, err := usersCollection.InsertMany(context.TODO(), users)
-	//// check for errors in the insertion
-	//if err != nil {
-	//	panic(err)
-	//}
-	//
-	//// display the ids of the newly inserted objects
-	//fmt.Println(result.InsertedID)
-	//fmt.Println(results.InsertedIDs)
-
-	//filter := bson.D{
-	//	{"$and",
-	//		bson.A{
-	//			bson.D{
-	//				{"age", bson.D{{"$gt", 25}}},
-	//			},
-	//		},
-	//	},
-	//}
-
-	//cursor, err := usersCollection.Find(context.TODO(), bson.D{})
-	//if err != nil {
-	//	panic(err)
-	//}
-
-	//var results []bson.M
-	//if err = cursor.All(context.TODO(), &results); err != nil {
-	//	log.Fatal().Err(err)
-	//}
-	//for _, result := range results {
-	//	fmt.Println(result)
-	//}
 
 	check := false
 
@@ -255,9 +205,14 @@ func main() {
 				result = GetWeatherData(string(urlWeatherAPI), "meter/sec")
 			}
 			fmt.Println(string(urlWeatherAPI))
-			bot.Send(htmlFormat(chatID, result))
-			urlWeatherAPI = []byte(cfg.URL)
+
+			ticker := time.NewTicker(24 * time.Hour)
+			for _ = range ticker.C {
+				bot.Send(htmlFormat(chatID, result))
+				urlWeatherAPI = []byte(cfg.URL)
+			}
 		}
 
 	}
+	select {}
 }
