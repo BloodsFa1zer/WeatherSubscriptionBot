@@ -41,12 +41,6 @@ var closeButton = tgbotapi.KeyboardButton{
 	Text: "Close",
 }
 
-func htmlFormat(chatID int64, text string) tgbotapi.MessageConfig {
-	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ParseMode = tgbotapi.ModeHTML
-	return msg
-}
-
 var units = map[string]string{
 	"Fahrenheit":      "imperial",
 	"Celsius":         "metric",
@@ -85,10 +79,8 @@ func main() {
 	log.Info().Msg("successfully parsed .env")
 
 	urlWeatherAPI := []byte(cfg.URL)
-	bot, err := tgbotapi.NewBotAPI(cfg.BotAPI)
-	if err != nil {
-		log.Panic().Err(err).Msg(" Bot API problem")
-	}
+	bot := BotInitialization(cfg)
+
 	APIKey := cfg.APIKey
 
 	bot.Debug = true
@@ -98,64 +90,45 @@ func main() {
 	latitude := 0.0
 	longitude := 0.0
 
-	usersCollection, err := MongoDBConnection(cfg)
+	usersCollection := MongoDBConnection(cfg)
 
 	updates := bot.GetUpdatesChan(updateConfig)
 	numberOfIterations := 0
+	existence := false
 	for update := range updates {
 		if update.Message == nil {
 			log.Info().Msg("there are no commands from user")
 			continue
 		}
 
-		existence := false
 		ID := primitive.ObjectID{}
 
 		userID := update.Message.From.ID
 		chatID := update.Message.Chat.ID
 
-		existence, err, ID = MongoDBFind(usersCollection, "UserID", userID)
-
+		existence, ID = MongoDBFind(usersCollection, "UserID", userID)
 		// existence == true so the item with the same data exists
 		// false if not
 
-		msg := htmlFormat(chatID, "")
-
 		if existence == true && numberOfIterations == 0 {
-			msg = htmlFormat(chatID, "<b>You are already subscribed to the bot.</b>")
-			bot.Send(msg)
-			msg = htmlFormat(chatID, "You can wait for the next daily weather info or update your geolocation")
-			msg.ReplyMarkup = subscriptionKeyboard
+			SendMessage(bot, chatID, "<b>You are already subscribed to the bot.</b>")
+			ReplyKeyboardMarkup(bot, chatID, subscriptionKeyboard, "You can wait for the next daily weather info or update your geolocation")
 			numberOfIterations++
-			if _, err := bot.Send(msg); err != nil {
-				log.Panic().Err(err).Msg(" Bot`s keyboard problem")
-			}
 		}
 
 		switch update.Message.Text {
 		case "/start":
-			msg := htmlFormat(chatID, startMessage)
+			//err = SendMessage(bot, chatID, startMessage)
 			if existence == false {
-				msg.ReplyMarkup = tgbotapi.NewReplyKeyboard([]tgbotapi.KeyboardButton{locationButton})
-				if _, err := bot.Send(msg); err != nil {
-					log.Panic().Err(err).Msg(" Bot`s keyboard problem")
-				}
+				ReplyMarkup(bot, chatID, startMessage, []tgbotapi.KeyboardButton{locationButton})
 				log.Info().Msg("User gets msg")
 			}
 			break
 		case "Close":
-			msg = htmlFormat(chatID, "Closing the reply keyboard...\n Thanks for using me! :)")
-			msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
-			if _, err = bot.Send(msg); err != nil {
-				log.Panic().Err(err)
-			}
+			RemoveKeyboard(bot, chatID, "Closing the reply keyboard...\n Thanks for using me! :)")
 			break
 		case "change your old location to the current one":
-			msg := htmlFormat(chatID, "Share your new location to update it or close if you don`t want to change it")
-			msg.ReplyMarkup = tgbotapi.NewReplyKeyboard([]tgbotapi.KeyboardButton{locationButton}, []tgbotapi.KeyboardButton{closeButton})
-			if _, err := bot.Send(msg); err != nil {
-				log.Panic().Err(err).Msg(" Bot`s keyboard problem")
-			}
+			ReplyMarkup(bot, chatID, "Share your new location to update it or close if you don`t want to change it", []tgbotapi.KeyboardButton{locationButton, closeButton})
 			log.Info().Msg("User gets msg")
 			break
 
@@ -165,45 +138,34 @@ func main() {
 			latitude = update.Message.Location.Latitude
 			longitude = update.Message.Location.Longitude
 			log.Info().Msg(" Successfully gets user location")
-			msg = htmlFormat(chatID, unitsMessage)
-			msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(unitsKeyboard)
-			if _, err := bot.Send(msg); err != nil {
-				log.Panic().Err(err).Msg(" Bot`s keyboard problem")
-			}
+			ReplyKeyboardMarkup(bot, chatID, tgbotapi.NewReplyKeyboard(unitsKeyboard), unitsMessage)
+
 			log.Info().Msg(" user gets keyboard to choose units")
-
+			//result := ""
+			//result = GetWeatherData(string(urlWeatherAPI))
+			//fmt.Println(string(urlWeatherAPI))
+			//SendMessage(bot, chatID, result)
+			//urlWeatherAPI = []byte(cfg.URL)
+		}
+		_, ok := units[update.Message.Text]
+		if ok == true {
 			urlWeatherAPI = fmt.Appendf(urlWeatherAPI, "lat=%f&lon=%f&appid=%s&units=%s", latitude, longitude, APIKey, units[update.Message.Text])
-
 			user := User{
 				UserID: userID,
 				Link:   string(urlWeatherAPI),
 			}
-
 			if existence == false {
 				MongoDBWrite(usersCollection, user)
+				result := RequestResult(string(urlWeatherAPI))
+				fmt.Println(string(urlWeatherAPI))
+				SendMessage(bot, chatID, result)
+				urlWeatherAPI = []byte(cfg.URL)
 			} else {
-				err = MongoDBUpdate(usersCollection, ID, user)
-				if err != nil {
-					panic(err)
-				}
-				msg := htmlFormat(chatID, "Your location is <b>successfully updated</b>")
-				msg.ReplyMarkup = tgbotapi.ReplyKeyboardRemove{
-					RemoveKeyboard: true,
-				}
-				if _, err := bot.Send(msg); err != nil {
-					log.Panic().Err(err).Msg(" Bot`s keyboard problem")
-				}
-				log.Info().Msg("User gets msg")
+				MongoDBUpdate(usersCollection, ID, user)
 
+				SendMessage(bot, chatID, "Your location and info are <b>successfully updated</b>")
+				RemoveKeyboard(bot, chatID, "Wait for the next weather update")
 			}
-			result := ""
-			result = GetWeatherData(string(urlWeatherAPI))
-			fmt.Println(string(urlWeatherAPI))
-			bot.Send(htmlFormat(chatID, result))
-			urlWeatherAPI = []byte(cfg.URL)
 		}
-		//ticker := time.NewTicker(24 * time.Hour)
-
 	}
-	// select {}
 }
