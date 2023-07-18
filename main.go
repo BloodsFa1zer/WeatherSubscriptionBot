@@ -1,17 +1,13 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"github.com/caarlos0/env/v9"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"time"
 )
 
@@ -24,26 +20,26 @@ type Config struct {
 
 var startMessage = "Hello! If you want to proceed, share <u>your location</u> with bot so it can provide you with" +
 	" <b>weather data according to your region.</b>"
-var unitsMessage = "Choose in which units you need to see weather info:"
-var locationMessage = "Choose option that is more suitable in your certain case."
 
-var locationKeyboard = tgbotapi.NewReplyKeyboard(
-	tgbotapi.NewKeyboardButtonRow(
-		tgbotapi.NewKeyboardButton("that is your constant location\n(can change it later)"),
-	),
-	tgbotapi.NewKeyboardButtonRow(
-		tgbotapi.NewKeyboardButton("temporary location\n(will need to change it to the constant one)"),
-	),
-)
+var unitsMessage = "Choose in which units you need to see weather info:"
 
 var subscriptionKeyboard = tgbotapi.NewReplyKeyboard(
 	tgbotapi.NewKeyboardButtonRow(
-		tgbotapi.NewKeyboardButton("continue with your location"),
-	),
-	tgbotapi.NewKeyboardButtonRow(
 		tgbotapi.NewKeyboardButton("change your old location to the current one"),
 	),
+	tgbotapi.NewKeyboardButtonRow(
+		tgbotapi.NewKeyboardButton("Close"),
+	),
 )
+
+var locationButton = tgbotapi.KeyboardButton{
+	Text:            "Click to share your location",
+	RequestLocation: true,
+}
+
+var closeButton = tgbotapi.KeyboardButton{
+	Text: "Close",
+}
 
 func htmlFormat(chatID int64, text string) tgbotapi.MessageConfig {
 	msg := tgbotapi.NewMessage(chatID, text)
@@ -57,8 +53,13 @@ var units = map[string]string{
 	"Kelvin(default)": "standard",
 }
 
-func main() {
+type User struct {
+	IDs    primitive.ObjectID `bson:"_id,omitempty"`
+	UserID int64              `bson:"UserID,omitempty"`
+	Link   string             `bson:"link,omitempty"`
+}
 
+func main() {
 	zerolog.TimeFieldFormat = time.TimeOnly
 
 	unitsKeyboard := make([]tgbotapi.KeyboardButton, len(units)+1)
@@ -83,19 +84,6 @@ func main() {
 	}
 	log.Info().Msg("successfully parsed .env")
 
-	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(cfg.URI_BD))
-	if err != nil {
-		panic(err)
-	}
-
-	if err := client.Ping(context.TODO(), readpref.Primary()); err != nil {
-		panic(err)
-	}
-
-	usersCollection := client.Database("telegram").Collection("usersID")
-
-	check := false
-
 	urlWeatherAPI := []byte(cfg.URL)
 	bot, err := tgbotapi.NewBotAPI(cfg.BotAPI)
 	if err != nil {
@@ -107,112 +95,115 @@ func main() {
 	updateConfig := tgbotapi.NewUpdate(0)
 	updateConfig.Timeout = 60
 
-	locationButton := tgbotapi.KeyboardButton{
-		Text:            "Click to share your location",
-		RequestLocation: true,
-	}
-	closeButton := tgbotapi.KeyboardButton{
-		Text: "Close",
-	}
-
 	latitude := 0.0
 	longitude := 0.0
 
+	usersCollection, err := MongoDBConnection(cfg)
+
 	updates := bot.GetUpdatesChan(updateConfig)
+	numberOfIterations := 0
 	for update := range updates {
 		if update.Message == nil {
 			log.Info().Msg("there are no commands from user")
 			continue
 		}
 
+		existence := false
+		ID := primitive.ObjectID{}
+
 		userID := update.Message.From.ID
 		chatID := update.Message.Chat.ID
-		opts := options.FindOne().SetSort(bson.D{{}})
-		ctx := usersCollection.FindOne(context.TODO(), bson.D{{"$eq", userID}}, opts)
-		if ctx != nil {
-			check = true // if check = true user with the same userID is already stored in the DB
-		}
+
+		existence, err, ID = MongoDBFind(usersCollection, "UserID", userID)
+
+		// existence == true so the item with the same data exists
+		// false if not
 
 		msg := htmlFormat(chatID, "")
+
+		if existence == true && numberOfIterations == 0 {
+			msg = htmlFormat(chatID, "<b>You are already subscribed to the bot.</b>")
+			bot.Send(msg)
+			msg = htmlFormat(chatID, "You can wait for the next daily weather info or update your geolocation")
+			msg.ReplyMarkup = subscriptionKeyboard
+			numberOfIterations++
+			if _, err := bot.Send(msg); err != nil {
+				log.Panic().Err(err).Msg(" Bot`s keyboard problem")
+			}
+		}
 
 		switch update.Message.Text {
 		case "/start":
 			msg := htmlFormat(chatID, startMessage)
-			msg.ReplyMarkup = tgbotapi.NewReplyKeyboard([]tgbotapi.KeyboardButton{locationButton})
-			if _, err := bot.Send(msg); err != nil {
-				log.Panic().Err(err).Msg(" Bot`s keyboard problem")
+			if existence == false {
+				msg.ReplyMarkup = tgbotapi.NewReplyKeyboard([]tgbotapi.KeyboardButton{locationButton})
+				if _, err := bot.Send(msg); err != nil {
+					log.Panic().Err(err).Msg(" Bot`s keyboard problem")
+				}
+				log.Info().Msg("User gets msg")
 			}
-			log.Info().Msg("User gets msg")
 			break
 		case "Close":
-			msg = tgbotapi.NewMessage(chatID, "Closing the reply keyboard...\n Thanks for using me! :)")
+			msg = htmlFormat(chatID, "Closing the reply keyboard...\n Thanks for using me! :)")
 			msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 			if _, err = bot.Send(msg); err != nil {
 				log.Panic().Err(err)
 			}
 			break
 		case "change your old location to the current one":
-			msg := htmlFormat(chatID, "If you need to update your location, choose suitable option or close keyboard")
-			usersCollection.DeleteOne(context.TODO(), bson.D{{"userID", userID}})
+			msg := htmlFormat(chatID, "Share your new location to update it or close if you don`t want to change it")
 			msg.ReplyMarkup = tgbotapi.NewReplyKeyboard([]tgbotapi.KeyboardButton{locationButton}, []tgbotapi.KeyboardButton{closeButton})
 			if _, err := bot.Send(msg); err != nil {
 				log.Panic().Err(err).Msg(" Bot`s keyboard problem")
 			}
 			log.Info().Msg("User gets msg")
 			break
+
 		}
 
 		if update.Message.Location != nil {
-			msg = tgbotapi.NewMessage(chatID, locationMessage)
-			msg.ReplyMarkup = locationKeyboard
-			if _, err := bot.Send(msg); err != nil {
-				log.Panic().Err(err).Msg(" Bot`s keyboard problem")
-			}
-			log.Info().Msg(" user gets keyboard to choose units")
 			latitude = update.Message.Location.Latitude
 			longitude = update.Message.Location.Longitude
 			log.Info().Msg(" Successfully gets user location")
-			msg = tgbotapi.NewMessage(chatID, unitsMessage)
+			msg = htmlFormat(chatID, unitsMessage)
 			msg.ReplyMarkup = tgbotapi.NewReplyKeyboard(unitsKeyboard)
 			if _, err := bot.Send(msg); err != nil {
 				log.Panic().Err(err).Msg(" Bot`s keyboard problem")
 			}
 			log.Info().Msg(" user gets keyboard to choose units")
-		}
 
-		if _, ok := units[update.Message.Text]; ok == true {
 			urlWeatherAPI = fmt.Appendf(urlWeatherAPI, "lat=%f&lon=%f&appid=%s&units=%s", latitude, longitude, APIKey, units[update.Message.Text])
-			if check != true {
-				user := bson.D{{"UserID", userID}, {"link", string(urlWeatherAPI)}}
-				_, err := usersCollection.InsertOne(context.TODO(), user)
-				if err != nil {
-					log.Panic().Err(err).Msg(" can`t insert user`s data into database")
-				}
-				log.Info().Msg("successfully insert user`s data")
+
+			user := User{
+				UserID: userID,
+				Link:   string(urlWeatherAPI),
+			}
+
+			if existence == false {
+				MongoDBWrite(usersCollection, user)
 			} else {
-				msg = htmlFormat(chatID, "<b>You are already subscribed to the bot.</b>")
-				msg.ReplyMarkup = subscriptionKeyboard
+				err = MongoDBUpdate(usersCollection, ID, user)
+				if err != nil {
+					panic(err)
+				}
+				msg := htmlFormat(chatID, "Your location is <b>successfully updated</b>")
+				msg.ReplyMarkup = tgbotapi.ReplyKeyboardRemove{
+					RemoveKeyboard: true,
+				}
 				if _, err := bot.Send(msg); err != nil {
 					log.Panic().Err(err).Msg(" Bot`s keyboard problem")
 				}
-				log.Info().Msg(" user gets keyboard to choose")
+				log.Info().Msg("User gets msg")
+
 			}
 			result := ""
-
-			if update.Message.Text == "Fahrenheit" {
-				result = GetWeatherData(string(urlWeatherAPI), "miles/hour")
-			} else {
-				result = GetWeatherData(string(urlWeatherAPI), "meter/sec")
-			}
+			result = GetWeatherData(string(urlWeatherAPI))
 			fmt.Println(string(urlWeatherAPI))
-
-			ticker := time.NewTicker(24 * time.Hour)
-			for _ = range ticker.C {
-				bot.Send(htmlFormat(chatID, result))
-				urlWeatherAPI = []byte(cfg.URL)
-			}
+			bot.Send(htmlFormat(chatID, result))
+			urlWeatherAPI = []byte(cfg.URL)
 		}
+		//ticker := time.NewTicker(24 * time.Hour)
 
 	}
-	select {}
+	// select {}
 }

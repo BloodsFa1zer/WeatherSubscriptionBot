@@ -22,7 +22,8 @@ type WeatherData struct {
 	} `json:"wind"`
 }
 
-func GetWeatherData(URL string, SpeedPerTime string) string {
+func GetWeatherData(URL string) string {
+
 	var WeatherInfo *WeatherData
 	response, err := http.Get(URL)
 	if err != nil {
@@ -43,7 +44,7 @@ func GetWeatherData(URL string, SpeedPerTime string) string {
 	fmt.Println("weather info:", WeatherInfo)
 	log.Info().Msg("Successfully unmarshal data and return it")
 	var result []byte
-	result = fmt.Appendf(result, "The weather in <b>%s</b> is <b>%.2f</b> and can be described as: <u>%s.</u> \n The wind speed is <b>%.2f %s</b>",
-		WeatherInfo.CityName, WeatherInfo.Temperature.CurrentTemperature, WeatherInfo.WeatherDescription[0].OverallDescription, WeatherInfo.WindData.WindSpeed, SpeedPerTime)
+	result = fmt.Appendf(result, "The weather in <b>%s</b> is <b>%.2f</b> and can be described as: <u>%s.</u> \n The wind speed is <b>%.2f/b>",
+		WeatherInfo.CityName, WeatherInfo.Temperature.CurrentTemperature, WeatherInfo.WeatherDescription[0].OverallDescription, WeatherInfo.WindData.WindSpeed)
 	return string(result)
 }
