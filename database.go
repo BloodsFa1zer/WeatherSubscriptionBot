@@ -10,7 +10,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-type Client mongo.Client
+type ClientConnection struct {
+	collection *mongo.Collection
+}
 
 func MongoDBConnection(config Config) *mongo.Collection {
 	ctx := context.TODO()
@@ -20,15 +22,15 @@ func MongoDBConnection(config Config) *mongo.Collection {
 		panic(err)
 		return nil
 	}
-
-	//defer client.Disconnect(ctx)
-
-	usersCollection := client.Database("telegram").Collection("usersID")
-	return usersCollection
+	clientConn := ClientConnection{
+		collection: client.Database("telegram").Collection("usersID"),
+	}
+	return clientConn.collection
 }
 
-func MongoDBFind(collection *mongo.Collection, field string, dataToFind any) (bool, primitive.ObjectID) {
-	cursor, err := collection.Find(context.TODO(), bson.M{field: dataToFind})
+func (cl ClientConnection) MongoDBFind(field string, dataToFind any) (bool, primitive.ObjectID) {
+
+	cursor, err := cl.collection.Find(context.TODO(), bson.M{field: dataToFind})
 	// check for errors in the finding
 	if err != nil {
 		panic(err)
@@ -44,7 +46,6 @@ func MongoDBFind(collection *mongo.Collection, field string, dataToFind any) (bo
 	}
 
 	// display the documents retrieved
-	fmt.Println("displaying all results in a collection")
 	for _, u := range users {
 		fmt.Println(u.IDs)
 		return true, u.IDs
@@ -52,21 +53,21 @@ func MongoDBFind(collection *mongo.Collection, field string, dataToFind any) (bo
 	return false, [12]byte{}
 }
 
-func MongoDBWrite(collection *mongo.Collection, user User) {
+func (cl ClientConnection) MongoDBWrite(user User) {
 	userInfo := bson.D{{"UserID", user.UserID}, {"link", user.Link}}
-	_, err := collection.InsertOne(context.TODO(), userInfo)
+	_, err := cl.collection.InsertOne(context.TODO(), userInfo)
 	if err != nil {
 		log.Panic().Err(err).Msg(" can`t insert user`s data into database")
 	}
 	log.Info().Msg("successfully insert user`s data")
 }
 
-func MongoDBUpdate(collection *mongo.Collection, id primitive.ObjectID, user User) {
+func (cl ClientConnection) MongoDBUpdate(id primitive.ObjectID, user User) {
 	update := bson.D{
 		{"$set", bson.D{{"UserID", user.UserID}}},
 		{"$set", bson.D{{"link", user.Link}}},
 	}
-	_, err := collection.UpdateByID(context.TODO(), id, update)
+	_, err := cl.collection.UpdateByID(context.TODO(), id, update)
 	if err != nil {
 		panic(err)
 	}
