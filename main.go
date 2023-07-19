@@ -6,7 +6,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-
 	"time"
 )
 
@@ -80,11 +79,13 @@ func main() {
 			bot.CreateKeyboard(chatID, len(units)+1, units, unitsMessage)
 
 			log.Info().Msg(" user gets keyboard to choose units")
+
 			//result := ""
 			//result = GetWeatherData(string(urlWeatherAPI))
 			//fmt.Println(string(urlWeatherAPI))
 			//SendMessage(bot, chatID, result)
 			//urlWeatherAPI = []byte(cfg.URL)
+
 		}
 		_, ok := units[update.Message.Text]
 		if ok == true {
@@ -93,23 +94,28 @@ func main() {
 				UserID: userID,
 				Link:   string(urlWeatherAPI),
 			}
+			result := ""
 			if existence == false {
 				client.MongoDBWrite(user)
-
-				url = WeatherURL(urlWeatherAPI)
-				result := url.RequestResult()
-				fmt.Println(string(urlWeatherAPI))
-				bot.SendMessage(chatID, result)
-				urlWeatherAPI = []byte(cfg.URL)
 				bot.SendMessage(chatID, "Your location and info are <b>successfully added</b>")
-				bot.RemoveKeyboard(chatID, "Wait for the next weather update")
+
 			} else {
 				client.MongoDBUpdate(ID, user)
-
 				bot.SendMessage(chatID, "Your location and info are <b>successfully updated</b>")
-				bot.RemoveKeyboard(chatID, "Wait for the next weather update")
 			}
+
+			bot.RemoveKeyboard(chatID, "Wait for the next weather update")
+
+			url = WeatherURL(urlWeatherAPI)
+			result = url.RequestResult()
+			fmt.Println(string(urlWeatherAPI))
+			go bot.inBackgroundMessage(chatID, WeatherURL(urlWeatherAPI))
+			bot.SendMessage(chatID, result)
+			urlWeatherAPI = []byte(cfg.URL)
+			select {}
+
 		}
 
 	}
+
 }

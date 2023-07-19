@@ -58,7 +58,7 @@ func (url WeatherURL) RequestResult() string {
 
 	data, overallDesc := url.GetWeatherData()
 	var result []byte
-	result = fmt.Appendf(result, "The weather in <b>%s</b> is <b>%.2f</b> and can be described as: <u>%s.</u> \n The wind speed is <b>%.2f</b>",
+	result = fmt.Appendf(result, "The weather in <b>%s</b> is <b>%.6f</b> and can be described as: <u>%s.</u> \n The wind speed is <b>%.5f</b>",
 		data.CityName, data.Temperature.CurrentTemperature, overallDesc, data.WindData.WindSpeed)
 	return string(result)
 }

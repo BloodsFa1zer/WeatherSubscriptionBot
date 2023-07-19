@@ -3,6 +3,7 @@ package main
 import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/rs/zerolog/log"
+	"time"
 )
 
 var startMessage = "Hello! If you want to proceed, share <u>your location</u> with bot so it can provide you with" +
@@ -96,4 +97,23 @@ func (bot *BotAPI) CreateKeyboard(chatID int64, length int, Map map[string]strin
 
 	bot.ReplyMarkup(chatID, text, unitsKeyboard)
 
+}
+
+func (bot *BotAPI) inBackgroundMessage(chatID int64, result WeatherURL) {
+	ticker := time.NewTicker(5 * time.Second)
+
+	go func() {
+		// Using for loop
+		for {
+			// Select statement
+			select {
+			// Case statement
+			case <-ticker.C:
+				url := result
+				res := url.RequestResult()
+				bot.SendMessage(chatID, res)
+
+			}
+		}
+	}()
 }
