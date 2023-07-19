@@ -2,88 +2,25 @@ package main
 
 import (
 	"fmt"
-	"github.com/caarlos0/env/v9"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/joho/godotenv"
+	"github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+
 	"time"
 )
-
-type Config struct {
-	URL    string `env:"URL_WEATHER"`
-	APIKey string `env:"API_KEY_WEATHER"`
-	URI_BD string `env:"URI_MongoDB"`
-	BotAPI string `env:"BOT_API_KEY"`
-}
-
-var startMessage = "Hello! If you want to proceed, share <u>your location</u> with bot so it can provide you with" +
-	" <b>weather data according to your region.</b>"
-
-var unitsMessage = "Choose in which units you need to see weather info:"
-
-var subscriptionKeyboard = tgbotapi.NewReplyKeyboard(
-	tgbotapi.NewKeyboardButtonRow(
-		tgbotapi.NewKeyboardButton("change your old location to the current one"),
-	),
-	tgbotapi.NewKeyboardButtonRow(
-		tgbotapi.NewKeyboardButton("Close"),
-	),
-)
-
-var locationButton = tgbotapi.KeyboardButton{
-	Text:            "Click to share your location",
-	RequestLocation: true,
-}
-
-var closeButton = tgbotapi.KeyboardButton{
-	Text: "Close",
-}
-
-var units = map[string]string{
-	"Fahrenheit":      "imperial",
-	"Celsius":         "metric",
-	"Kelvin(default)": "standard",
-}
-
-type User struct {
-	IDs    primitive.ObjectID `bson:"_id,omitempty"`
-	UserID int64              `bson:"UserID,omitempty"`
-	Link   string             `bson:"link,omitempty"`
-}
 
 func main() {
 	zerolog.TimeFieldFormat = time.TimeOnly
 
-	unitsKeyboard := make([]tgbotapi.KeyboardButton, len(units)+1)
-	index := 0
-	for key := range units {
-		unitsKeyboard[index] = tgbotapi.NewKeyboardButton(key)
-		index++
-	}
-	unitsKeyboard[index] = tgbotapi.NewKeyboardButton("Close")
-
-	err := godotenv.Load(".env")
-	if err != nil {
-		log.Panic().Err(err).Msg(" does not load .env")
-	}
-	log.Info().Msg("successfully load .env")
-
-	cfg := Config{}
-
-	err = env.Parse(&cfg)
-	if err != nil {
-		log.Panic().Err(err).Msg(" unable to parse environment variables")
-	}
-	log.Info().Msg("successfully parsed .env")
+	cfg := LoadENV(".env")
+	cfg.ParseENV()
 
 	urlWeatherAPI := []byte(cfg.URL)
-	bot := botAPI{
-		Key: BotInitialization(cfg),
-	}
+	bot := NewBotAPI(*cfg)
 
 	APIKey := cfg.APIKey
+	var url WeatherURL
 
 	bot.Key.Debug = true
 	updateConfig := tgbotapi.NewUpdate(0)
@@ -92,11 +29,12 @@ func main() {
 	latitude := 0.0
 	longitude := 0.0
 
-	client := ClientConnection{collection: MongoDBConnection(cfg)}
+	client := NewMongoDBConnection(*cfg)
 
 	updates := bot.Key.GetUpdatesChan(updateConfig)
 	numberOfIterations := 0
 	existence := false
+
 	for update := range updates {
 		if update.Message == nil {
 			log.Info().Msg("there are no commands from user")
@@ -139,7 +77,7 @@ func main() {
 			latitude = update.Message.Location.Latitude
 			longitude = update.Message.Location.Longitude
 			log.Info().Msg(" Successfully gets user location")
-			bot.ReplyKeyboardMarkup(chatID, tgbotapi.NewReplyKeyboard(unitsKeyboard), unitsMessage)
+			bot.CreateKeyboard(chatID, len(units)+1, units, unitsMessage)
 
 			log.Info().Msg(" user gets keyboard to choose units")
 			//result := ""
@@ -157,7 +95,9 @@ func main() {
 			}
 			if existence == false {
 				client.MongoDBWrite(user)
-				result := RequestResult(string(urlWeatherAPI))
+
+				url = WeatherURL(urlWeatherAPI)
+				result := url.RequestResult()
 				fmt.Println(string(urlWeatherAPI))
 				bot.SendMessage(chatID, result)
 				urlWeatherAPI = []byte(cfg.URL)
@@ -170,5 +110,6 @@ func main() {
 				bot.RemoveKeyboard(chatID, "Wait for the next weather update")
 			}
 		}
+
 	}
 }

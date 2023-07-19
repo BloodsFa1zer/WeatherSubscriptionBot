@@ -10,13 +10,18 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+type User struct {
+	IDs    primitive.ObjectID `bson:"_id,omitempty"`
+	UserID int64              `bson:"UserID,omitempty"`
+	Link   string             `bson:"link,omitempty"`
+}
+
 type ClientConnection struct {
 	collection *mongo.Collection
 }
 
-func MongoDBConnection(config Config) *mongo.Collection {
+func NewMongoDBConnection(config Config) *ClientConnection {
 	ctx := context.TODO()
-
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(config.URI_BD))
 	if err != nil {
 		panic(err)
@@ -25,16 +30,15 @@ func MongoDBConnection(config Config) *mongo.Collection {
 	clientConn := ClientConnection{
 		collection: client.Database("telegram").Collection("usersID"),
 	}
-	return clientConn.collection
+	return &clientConn
 }
 
-func (cl ClientConnection) MongoDBFind(field string, dataToFind any) (bool, primitive.ObjectID) {
+func (cl *ClientConnection) MongoDBFind(field string, dataToFind any) (bool, primitive.ObjectID) {
 
 	cursor, err := cl.collection.Find(context.TODO(), bson.M{field: dataToFind})
 	// check for errors in the finding
 	if err != nil {
 		panic(err)
-		return false, [12]byte{}
 	}
 
 	// convert the cursor result to bson
@@ -42,7 +46,6 @@ func (cl ClientConnection) MongoDBFind(field string, dataToFind any) (bool, prim
 	// check for errors in the conversion
 	if err = cursor.All(context.TODO(), &users); err != nil {
 		panic(err)
-		return false, [12]byte{}
 	}
 
 	// display the documents retrieved
@@ -53,7 +56,7 @@ func (cl ClientConnection) MongoDBFind(field string, dataToFind any) (bool, prim
 	return false, [12]byte{}
 }
 
-func (cl ClientConnection) MongoDBWrite(user User) {
+func (cl *ClientConnection) MongoDBWrite(user User) {
 	userInfo := bson.D{{"UserID", user.UserID}, {"link", user.Link}}
 	_, err := cl.collection.InsertOne(context.TODO(), userInfo)
 	if err != nil {
@@ -62,7 +65,7 @@ func (cl ClientConnection) MongoDBWrite(user User) {
 	log.Info().Msg("successfully insert user`s data")
 }
 
-func (cl ClientConnection) MongoDBUpdate(id primitive.ObjectID, user User) {
+func (cl *ClientConnection) MongoDBUpdate(id primitive.ObjectID, user User) {
 	update := bson.D{
 		{"$set", bson.D{{"UserID", user.UserID}}},
 		{"$set", bson.D{{"link", user.Link}}},
