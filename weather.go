@@ -28,12 +28,14 @@ var units = map[string]string{
 	"Kelvin(default)": "standard",
 }
 
-type WeatherURL string
+type WeatherAPI struct {
+	WeatherURL string
+}
 
-func (url WeatherURL) GetWeatherData() (*WeatherData, string) {
+func (w *WeatherAPI) getWeatherData() (*WeatherData, string) {
 
 	var WeatherInfo *WeatherData
-	response, err := http.Get(string(url))
+	response, err := http.Get(w.WeatherURL)
 	if err != nil {
 		log.Fatal().Err(err).Msg(" Can`t read a response")
 	}
@@ -54,11 +56,11 @@ func (url WeatherURL) GetWeatherData() (*WeatherData, string) {
 	return WeatherInfo, WeatherInfo.WeatherDescription[0].OverallDescription
 }
 
-func (url WeatherURL) RequestResult() string {
+func (w *WeatherAPI) RequestResult() string {
 
-	data, overallDesc := url.GetWeatherData()
+	data, overallDesc := w.getWeatherData()
 	var result []byte
-	result = fmt.Appendf(result, "The weather in <b>%s</b> is <b>%.6f</b> and can be described as: <u>%s.</u> \n The wind speed is <b>%.5f</b>",
+	result = fmt.Appendf(result, "The weather in <b>%s</b> is <b>%.2f</b> and can be described as: <u>%s.</u> \n The wind speed is <b>%.2f</b>",
 		data.CityName, data.Temperature.CurrentTemperature, overallDesc, data.WindData.WindSpeed)
 	return string(result)
 }

@@ -99,18 +99,25 @@ func (bot *BotAPI) CreateKeyboard(chatID int64, length int, Map map[string]strin
 
 }
 
-func (bot *BotAPI) inBackgroundMessage(chatID int64, result WeatherURL) {
-	ticker := time.NewTicker(5 * time.Second)
+func (bot *BotAPI) GetUpdates() <-chan tgbotapi.Update {
+	bot.Key.Debug = true
+	updateConfig := tgbotapi.NewUpdate(0)
+	updateConfig.Timeout = 60
+
+	updates := bot.Key.GetUpdatesChan(updateConfig)
+	return updates
+}
+
+//
+
+func (bot *BotAPI) inBackgroundMessage(chatID int64, result WeatherAPI) {
+	ticker := time.NewTicker(24 * time.Hour)
 
 	go func() {
-		// Using for loop
 		for {
-			// Select statement
 			select {
-			// Case statement
 			case <-ticker.C:
-				url := result
-				res := url.RequestResult()
+				res := result.RequestResult()
 				bot.SendMessage(chatID, res)
 
 			}

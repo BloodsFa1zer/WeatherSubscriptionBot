@@ -19,22 +19,16 @@ func main() {
 	bot := NewBotAPI(*cfg)
 
 	APIKey := cfg.APIKey
-	var url WeatherURL
-
-	bot.Key.Debug = true
-	updateConfig := tgbotapi.NewUpdate(0)
-	updateConfig.Timeout = 60
 
 	latitude := 0.0
 	longitude := 0.0
 
 	client := NewMongoDBConnection(*cfg)
 
-	updates := bot.Key.GetUpdatesChan(updateConfig)
 	numberOfIterations := 0
 	existence := false
 
-	for update := range updates {
+	for update := range bot.GetUpdates() {
 		if update.Message == nil {
 			log.Info().Msg("there are no commands from user")
 			continue
@@ -90,9 +84,10 @@ func main() {
 		_, ok := units[update.Message.Text]
 		if ok == true {
 			urlWeatherAPI = fmt.Appendf(urlWeatherAPI, "lat=%f&lon=%f&appid=%s&units=%s", latitude, longitude, APIKey, units[update.Message.Text])
+			WeatherResponse := string(urlWeatherAPI)
 			user := User{
 				UserID: userID,
-				Link:   string(urlWeatherAPI),
+				Link:   WeatherResponse,
 			}
 			result := ""
 			if existence == false {
@@ -106,10 +101,12 @@ func main() {
 
 			bot.RemoveKeyboard(chatID, "Wait for the next weather update")
 
-			url = WeatherURL(urlWeatherAPI)
-			result = url.RequestResult()
-			fmt.Println(string(urlWeatherAPI))
-			go bot.inBackgroundMessage(chatID, WeatherURL(urlWeatherAPI))
+			weather := WeatherAPI{
+				WeatherURL: WeatherResponse,
+			}
+			//	result = weather.RequestResult()
+			fmt.Println(WeatherResponse)
+			go bot.inBackgroundMessage(chatID, weather)
 			bot.SendMessage(chatID, result)
 			urlWeatherAPI = []byte(cfg.URL)
 			select {}
