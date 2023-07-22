@@ -114,7 +114,7 @@ func (bot *BotAPI) GetUpdates() <-chan tgbotapi.Update {
 }
 
 func (bot *BotAPI) inBackgroundMessage(chatID int64, result WeatherAPI, client *ClientConnection) {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(1 * time.Minute)
 
 	go func() {
 		for {
