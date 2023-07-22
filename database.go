@@ -11,9 +11,10 @@ import (
 )
 
 type User struct {
-	IDs    primitive.ObjectID `bson:"_id,omitempty"`
-	UserID int64              `bson:"UserID,omitempty"`
-	Link   string             `bson:"link,omitempty"`
+	IDs      primitive.ObjectID `bson:"_id,omitempty"`
+	UserID   int64              `bson:"UserID,omitempty"`
+	Link     string             `bson:"link,omitempty"`
+	SendTime string             `bson:"time, omitempty"`
 }
 
 type ClientConnection struct {
@@ -52,12 +53,13 @@ func (cl *ClientConnection) MongoDBFind(field string, dataToFind any) (bool, pri
 	for _, u := range users {
 		fmt.Println(u.IDs)
 		return true, u.IDs
+
 	}
 	return false, [12]byte{}
 }
 
 func (cl *ClientConnection) MongoDBWrite(user User) {
-	userInfo := bson.D{{"UserID", user.UserID}, {"link", user.Link}}
+	userInfo := bson.D{{"UserID", user.UserID}, {"link", user.Link}, {"time", user.SendTime}}
 	_, err := cl.collection.InsertOne(context.TODO(), userInfo)
 	if err != nil {
 		log.Panic().Err(err).Msg(" can`t insert user`s data into database")
@@ -65,12 +67,13 @@ func (cl *ClientConnection) MongoDBWrite(user User) {
 	log.Info().Msg("successfully insert user`s data")
 }
 
-func (cl *ClientConnection) MongoDBUpdate(id primitive.ObjectID, user User) {
-	update := bson.D{
-		{"$set", bson.D{{"UserID", user.UserID}}},
-		{"$set", bson.D{{"link", user.Link}}},
-	}
-	_, err := cl.collection.UpdateByID(context.TODO(), id, update)
+func (cl *ClientConnection) MongoDBUpdate(id *primitive.ObjectID, user User) {
+	//option := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	fmt.Println("ID!!!!!!!!!!!:", id)
+
+	//filter := bson.M{"_id": id}
+	update := bson.M{"$set": bson.M{"UserID": user.UserID, "link": user.Link, "time": user.SendTime}}
+	_, err := cl.collection.UpdateByID(context.Background(), id, update)
 	if err != nil {
 		panic(err)
 	}

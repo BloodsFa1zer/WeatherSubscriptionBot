@@ -5,11 +5,13 @@ import (
 	"github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"time"
 )
 
+var timeFormat = "15:45"
+
 func main() {
+	//	fmt.Println(time.Now().Format("15:04"))
 	zerolog.TimeFieldFormat = time.TimeOnly
 
 	cfg := LoadENV(".env")
@@ -22,24 +24,31 @@ func main() {
 
 	latitude := 0.0
 	longitude := 0.0
+	checkTime := false
 
 	client := NewMongoDBConnection(*cfg)
 
 	numberOfIterations := 0
-	existence := false
+	//existence := false
+	number := 0
+
+	var lastUpdateID int
 
 	for update := range bot.GetUpdates() {
+
 		if update.Message == nil {
 			log.Info().Msg("there are no commands from user")
 			continue
 		}
+		if update.UpdateID > lastUpdateID {
+			lastUpdateID = update.UpdateID
+		}
 
-		ID := primitive.ObjectID{}
-
+		number = 1
 		userID := update.Message.From.ID
 		chatID := update.Message.Chat.ID
 
-		existence, ID = client.MongoDBFind("UserID", userID)
+		existence, ID := client.MongoDBFind("UserID", userID)
 		// existence == true so the item with the same data exists
 		// false if not
 
@@ -51,7 +60,7 @@ func main() {
 
 		switch update.Message.Text {
 		case "/start":
-			if existence == false {
+			if existence != true {
 				bot.ReplyMarkup(chatID, startMessage, []tgbotapi.KeyboardButton{locationButton})
 				log.Info().Msg("User gets msg")
 			}
@@ -74,45 +83,57 @@ func main() {
 
 			log.Info().Msg(" user gets keyboard to choose units")
 
-			//result := ""
-			//result = GetWeatherData(string(urlWeatherAPI))
-			//fmt.Println(string(urlWeatherAPI))
-			//SendMessage(bot, chatID, result)
-			//urlWeatherAPI = []byte(cfg.URL)
-
 		}
+
 		_, ok := units[update.Message.Text]
 		if ok == true {
 			urlWeatherAPI = fmt.Appendf(urlWeatherAPI, "lat=%f&lon=%f&appid=%s&units=%s", latitude, longitude, APIKey, units[update.Message.Text])
-			WeatherResponse := string(urlWeatherAPI)
-			user := User{
-				UserID: userID,
-				Link:   WeatherResponse,
-			}
-			result := ""
-			if existence == false {
-				client.MongoDBWrite(user)
-				bot.SendMessage(chatID, "Your location and info are <b>successfully added</b>")
+			bot.RemoveKeyboard(chatID, "Closing the reply keyboard.")
+			bot.SendMessage(chatID, timeMessage)
+			checkTime = true
+			number = 0
+		}
 
+		if checkTime == true && bot.isValidMessage(update.Message.Text) == true {
+			timeResult, checkTimeFormat := bot.isValidTime(chatID, update.Message.Text)
+			if checkTimeFormat == true {
+				res := timeResult.Format("15:04")
+				WeatherResponse := string(urlWeatherAPI)
+				weather := WeatherAPI{
+					WeatherURL: WeatherResponse,
+				}
+
+				user := User{
+					UserID:   userID,
+					Link:     WeatherResponse,
+					SendTime: res,
+				}
+
+				result := ""
+				if existence == false {
+					client.MongoDBWrite(user)
+					bot.SendMessage(chatID, "Your location and info are <b>successfully added</b>")
+
+				} else {
+					client.MongoDBUpdate(&ID, user)
+					bot.SendMessage(chatID, "Your location and info are <b>successfully updated</b>")
+				}
+
+				bot.RemoveKeyboard(chatID, "Wait for the next weather update")
+				result = weather.RequestResult()
+				fmt.Println(WeatherResponse)
+				bot.SendMessage(chatID, result)
+				go bot.inBackgroundMessage(chatID, weather, client)
+				urlWeatherAPI = []byte(cfg.URL)
+				select {}
 			} else {
-				client.MongoDBUpdate(ID, user)
-				bot.SendMessage(chatID, "Your location and info are <b>successfully updated</b>")
+				bot.SendMessage(chatID, timeMessage)
+				continue
 			}
 
-			bot.RemoveKeyboard(chatID, "Wait for the next weather update")
-
-			weather := WeatherAPI{
-				WeatherURL: WeatherResponse,
-			}
-			//	result = weather.RequestResult()
-			fmt.Println(WeatherResponse)
-			go bot.inBackgroundMessage(chatID, weather)
-			bot.SendMessage(chatID, result)
-			urlWeatherAPI = []byte(cfg.URL)
-			select {}
-
+		} else if number != 0 && checkTime == true {
+			bot.SendMessage(chatID, timeMessage)
 		}
 
 	}
-
 }

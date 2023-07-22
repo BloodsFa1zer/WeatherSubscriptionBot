@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/rs/zerolog/log"
+	"regexp"
 	"time"
 )
 
@@ -10,6 +12,8 @@ var startMessage = "Hello! If you want to proceed, share <u>your location</u> wi
 	" <b>weather data according to your region.</b>"
 
 var unitsMessage = "Choose in which units you need to see weather info:"
+
+var timeMessage = "You need to enter time when the daily weather update will be sent, that is correspond with given example " + timeFormat
 
 var subscriptionKeyboard = tgbotapi.NewReplyKeyboard(
 	tgbotapi.NewKeyboardButtonRow(
@@ -105,22 +109,44 @@ func (bot *BotAPI) GetUpdates() <-chan tgbotapi.Update {
 	updateConfig.Timeout = 60
 
 	updates := bot.Key.GetUpdatesChan(updateConfig)
+
 	return updates
 }
 
-//
-
-func (bot *BotAPI) inBackgroundMessage(chatID int64, result WeatherAPI) {
-	ticker := time.NewTicker(24 * time.Hour)
+func (bot *BotAPI) inBackgroundMessage(chatID int64, result WeatherAPI, client *ClientConnection) {
+	ticker := time.NewTicker(30 * time.Second)
 
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
-				res := result.RequestResult()
-				bot.SendMessage(chatID, res)
+				fmt.Println("enter")
+				fmt.Println(time.Now().Format("15:04"))
+				existence, _ := client.MongoDBFind("time", time.Now().Format("15:04"))
+
+				if existence == true {
+					res := result.RequestResult()
+					bot.SendMessage(chatID, res)
+				} else {
+					fmt.Println("no!!!")
+				}
 
 			}
 		}
 	}()
+}
+
+func (bot *BotAPI) isValidMessage(message string) bool {
+	timePattern := regexp.MustCompile(`^\d{2}:\d{2}$`)
+	return timePattern.MatchString(message)
+
+}
+
+func (bot *BotAPI) isValidTime(chatID int64, message string) (time.Time, bool) {
+
+	timeResult, err := time.Parse("15:04", message)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return timeResult, true
 }
