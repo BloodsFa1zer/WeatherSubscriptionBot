@@ -8,7 +8,6 @@ WORKDIR /Users/mishashevnuk/GolandProjects/app2.4
 
 
 COPY . .
-COPY .env .env
 
 RUN go mod download
 
@@ -25,7 +24,7 @@ FROM alpine:latest
 RUN mkdir /data
 
 COPY --from=dev-env /server ./
-
 COPY .env .env
+
 CMD ["./server"]
 
