@@ -21,7 +21,7 @@ type ClientConnection struct {
 	collection *mongo.Collection
 }
 
-func NewMongoDBConnection(config Config) *ClientConnection {
+func newConnection(config Config) *ClientConnection {
 	ctx := context.TODO()
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(config.URI_BD))
 	if err != nil {
@@ -34,7 +34,7 @@ func NewMongoDBConnection(config Config) *ClientConnection {
 	return &clientConn
 }
 
-func (cl *ClientConnection) MongoDBFind(field string, dataToFind any) (bool, primitive.ObjectID) {
+func (cl *ClientConnection) findUser(field string, dataToFind any) (bool, primitive.ObjectID) {
 
 	cursor, err := cl.collection.Find(context.TODO(), bson.M{field: dataToFind})
 	// check for errors in the finding
@@ -58,7 +58,7 @@ func (cl *ClientConnection) MongoDBFind(field string, dataToFind any) (bool, pri
 	return false, [12]byte{}
 }
 
-func (cl *ClientConnection) MongoDBWrite(user User) {
+func (cl *ClientConnection) createUser(user User) {
 	userInfo := bson.D{{"UserID", user.UserID}, {"link", user.Link}, {"time", user.SendTime}}
 	_, err := cl.collection.InsertOne(context.TODO(), userInfo)
 	if err != nil {
@@ -67,11 +67,8 @@ func (cl *ClientConnection) MongoDBWrite(user User) {
 	log.Info().Msg("successfully insert user`s data")
 }
 
-func (cl *ClientConnection) MongoDBUpdate(id *primitive.ObjectID, user User) {
-	//option := options.FindOneAndUpdate().SetReturnDocument(options.After)
-	fmt.Println("ID!!!!!!!!!!!:", id)
+func (cl *ClientConnection) updateUser(id *primitive.ObjectID, user User) {
 
-	//filter := bson.M{"_id": id}
 	update := bson.M{"$set": bson.M{"UserID": user.UserID, "link": user.Link, "time": user.SendTime}}
 	_, err := cl.collection.UpdateByID(context.Background(), id, update)
 	if err != nil {

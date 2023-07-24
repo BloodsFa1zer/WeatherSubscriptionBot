@@ -11,7 +11,6 @@ import (
 var timeFormat = "15:45"
 
 func main() {
-	//	fmt.Println(time.Now().Format("15:04"))
 	zerolog.TimeFieldFormat = time.TimeOnly
 
 	cfg := LoadENV(".env")
@@ -25,12 +24,10 @@ func main() {
 	latitude := 0.0
 	longitude := 0.0
 	checkTime := false
-
-	client := NewMongoDBConnection(*cfg)
-
 	numberOfIterations := 0
-	//existence := false
 	number := 0
+
+	client := newConnection(*cfg)
 
 	var lastUpdateID int
 
@@ -48,11 +45,11 @@ func main() {
 		userID := update.Message.From.ID
 		chatID := update.Message.Chat.ID
 
-		existence, ID := client.MongoDBFind("UserID", userID)
-		// existence == true so the item with the same data exists
+		isUserExist, ID := client.findUser("UserID", userID)
+		// isUserExist == true so the item with the same data exists
 		// false if not
 
-		if existence == true && numberOfIterations == 0 {
+		if isUserExist == true && numberOfIterations == 0 {
 			bot.SendMessage(chatID, "<b>You are already subscribed to the bot.</b>")
 			bot.ReplyKeyboardMarkup(chatID, subscriptionKeyboard, "You can wait for the next daily weather info or update your geolocation")
 			numberOfIterations++
@@ -60,7 +57,7 @@ func main() {
 
 		switch update.Message.Text {
 		case "/start":
-			if existence != true {
+			if isUserExist != true {
 				bot.ReplyMarkup(chatID, startMessage, []tgbotapi.KeyboardButton{locationButton})
 				log.Info().Msg("User gets msg")
 			}
@@ -85,17 +82,14 @@ func main() {
 
 		}
 
-		_, ok := units[update.Message.Text]
-		if ok == true {
-			urlWeatherAPI = fmt.Appendf(urlWeatherAPI, "lat=%f&lon=%f&appid=%s&units=%s", latitude, longitude, APIKey, units[update.Message.Text])
+		if unit, ok := units[update.Message.Text]; ok == true {
+			urlWeatherAPI = fmt.Appendf(urlWeatherAPI, "lat=%f&lon=%f&appid=%s&units=%s", latitude, longitude, APIKey, unit)
 			bot.RemoveKeyboard(chatID, "Closing the reply keyboard.")
 			bot.SendMessage(chatID, timeMessage)
 			checkTime = true
 			number = 0
-		}
-
-		if checkTime == true && bot.isValidMessage(update.Message.Text) == true {
-			timeResult, checkTimeFormat := bot.isValidTime(chatID, update.Message.Text)
+		} else if checkTime == true && bot.isValidMessage(update.Message.Text) == true {
+			timeResult, checkTimeFormat := bot.getTimeFromString(chatID, update.Message.Text)
 			if checkTimeFormat == true {
 				res := timeResult.Format("15:04")
 				WeatherResponse := string(urlWeatherAPI)
@@ -110,12 +104,12 @@ func main() {
 				}
 
 				result := ""
-				if existence == false {
-					client.MongoDBWrite(user)
+				if isUserExist == false {
+					client.createUser(user)
 					bot.SendMessage(chatID, "Your location and info are <b>successfully added</b>")
 
 				} else {
-					client.MongoDBUpdate(&ID, user)
+					client.updateUser(&ID, user)
 					bot.SendMessage(chatID, "Your location and info are <b>successfully updated</b>")
 				}
 

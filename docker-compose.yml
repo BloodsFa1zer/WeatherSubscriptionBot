@@ -1,0 +1,12 @@
+version: '3.6'
+
+services:
+  api:
+    container_name: compose
+    image: compose
+    ports:
+      - "8000:8080"
+    volumes:
+      - ./:/GolandProjects/app2.4
+    build:
+      dockerfile: Dockerfile

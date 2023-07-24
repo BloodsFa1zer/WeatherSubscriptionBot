@@ -122,7 +122,7 @@ func (bot *BotAPI) inBackgroundMessage(chatID int64, result WeatherAPI, client *
 			case <-ticker.C:
 				fmt.Println("enter")
 				fmt.Println(time.Now().Format("15:04"))
-				existence, _ := client.MongoDBFind("time", time.Now().Format("15:04"))
+				existence, _ := client.findUser("time", time.Now().Format("15:04"))
 
 				if existence == true {
 					res := result.RequestResult()
@@ -142,7 +142,7 @@ func (bot *BotAPI) isValidMessage(message string) bool {
 
 }
 
-func (bot *BotAPI) isValidTime(chatID int64, message string) (time.Time, bool) {
+func (bot *BotAPI) getTimeFromString(chatID int64, message string) (time.Time, bool) {
 
 	timeResult, err := time.Parse("15:04", message)
 	if err != nil {
