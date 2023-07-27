@@ -25,7 +25,7 @@ func newConnection(config Config) *ClientConnection {
 	ctx := context.TODO()
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(config.URI_BD))
 	if err != nil {
-		panic(err)
+		log.Warn().Err(err).Msg(" can`t connect to MongoDB")
 		return nil
 	}
 	clientConn := ClientConnection{
@@ -39,14 +39,14 @@ func (cl *ClientConnection) findUser(field string, dataToFind any) *User {
 	cursor, err := cl.collection.Find(context.TODO(), bson.M{field: dataToFind})
 	// check for errors in the finding
 	if err != nil {
-		panic(err)
+		log.Warn().Err(err).Msg(" can`t find user")
 	}
 
 	// convert the cursor result to bson
 	var users []User
 	// check for errors in the conversion
 	if err = cursor.All(context.TODO(), &users); err != nil {
-		panic(err)
+		log.Warn().Err(err).Msg(" can`t convert results")
 	}
 	if users != nil {
 		// display the documents retrieved
@@ -63,7 +63,8 @@ func (cl *ClientConnection) createUser(user User) {
 	userInfo := bson.D{{"UserID", user.UserID}, {"link", user.Link}, {"time", user.SendTime}}
 	_, err := cl.collection.InsertOne(context.TODO(), userInfo)
 	if err != nil {
-		log.Panic().Err(err).Msg(" can`t insert user`s data into database")
+		log.Warn().Err(err).Msg(" can`t insert user`s data into database")
+		return
 	}
 	log.Info().Msg("successfully insert user`s data")
 }
