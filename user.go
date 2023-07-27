@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -36,27 +35,25 @@ func newConnection(config Config) *ClientConnection {
 
 func (cl *ClientConnection) findUser(field string, dataToFind any) *User {
 
-	cursor, err := cl.collection.Find(context.TODO(), bson.M{field: dataToFind})
+	result := cl.collection.FindOne(context.TODO(), bson.M{field: dataToFind})
+
 	// check for errors in the finding
-	if err != nil {
-		log.Warn().Err(err).Msg(" can`t find user")
+	if result.Err() != nil {
+		log.Warn().Err(result.Err()).Msg(" can`t find user")
 	}
 
 	// convert the cursor result to bson
-	var users []User
+	var user User
 	// check for errors in the conversion
-	if err = cursor.All(context.TODO(), &users); err != nil {
+	if err := result.Decode(&user); err != mongo.ErrNoDocuments {
+		log.Warn().Err(err).Msg(" no results to convert")
+		return nil
+	} else if err != nil {
 		log.Warn().Err(err).Msg(" can`t convert results")
-	}
-	if users != nil {
-		// display the documents retrieved
-		for _, u := range users {
-			fmt.Println(u.ID)
-			return &u
-		}
+		return nil
 	}
 
-	return nil
+	return &user
 }
 
 func (cl *ClientConnection) createUser(user User) {
