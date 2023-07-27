@@ -11,7 +11,7 @@ import (
 )
 
 type User struct {
-	IDs      primitive.ObjectID `bson:"_id,omitempty"`
+	ID       primitive.ObjectID `bson:"_id,omitempty"`
 	UserID   int64              `bson:"UserID,omitempty"`
 	Link     string             `bson:"link,omitempty"`
 	SendTime string             `bson:"time, omitempty"`
@@ -34,7 +34,7 @@ func newConnection(config Config) *ClientConnection {
 	return &clientConn
 }
 
-func (cl *ClientConnection) findUser(field string, dataToFind any) (bool, primitive.ObjectID) {
+func (cl *ClientConnection) findUser(field string, dataToFind any) *User {
 
 	cursor, err := cl.collection.Find(context.TODO(), bson.M{field: dataToFind})
 	// check for errors in the finding
@@ -48,14 +48,15 @@ func (cl *ClientConnection) findUser(field string, dataToFind any) (bool, primit
 	if err = cursor.All(context.TODO(), &users); err != nil {
 		panic(err)
 	}
-
-	// display the documents retrieved
-	for _, u := range users {
-		fmt.Println(u.IDs)
-		return true, u.IDs
-
+	if users != nil {
+		// display the documents retrieved
+		for _, u := range users {
+			fmt.Println(u.ID)
+			return &u
+		}
 	}
-	return false, [12]byte{}
+
+	return nil
 }
 
 func (cl *ClientConnection) createUser(user User) {

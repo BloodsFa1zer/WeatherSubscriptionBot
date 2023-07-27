@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/rs/zerolog/log"
 	"regexp"
@@ -24,13 +23,13 @@ var subscriptionKeyboard = tgbotapi.NewReplyKeyboard(
 	),
 )
 
+var closeButton = tgbotapi.KeyboardButton{
+	Text: "Close",
+}
+
 var locationButton = tgbotapi.KeyboardButton{
 	Text:            "Click to share your location",
 	RequestLocation: true,
-}
-
-var closeButton = tgbotapi.KeyboardButton{
-	Text: "Close",
 }
 
 type BotAPI struct {
@@ -90,7 +89,7 @@ func (bot *BotAPI) ReplyKeyboardMarkup(chatID int64, markup tgbotapi.ReplyKeyboa
 
 }
 
-func (bot *BotAPI) CreateKeyboard(chatID int64, length int, Map map[string]string, text string) {
+func (bot *BotAPI) createKeyboard(chatID int64, length int, Map map[string]string, text string) {
 	unitsKeyboard := make([]tgbotapi.KeyboardButton, length)
 	index := 0
 	for key := range Map {
@@ -103,6 +102,14 @@ func (bot *BotAPI) CreateKeyboard(chatID int64, length int, Map map[string]strin
 
 }
 
+func (bot *BotAPI) ReplySubscriptionMarkup(chatID int64, text string) {
+	bot.ReplyKeyboardMarkup(chatID, subscriptionKeyboard, text)
+}
+
+func (bot *BotAPI) CreateUnitsKeyboard(chatID int64) {
+	bot.createKeyboard(chatID, len(units)+1, units, unitsMessage)
+}
+
 func (bot *BotAPI) GetUpdates() <-chan tgbotapi.Update {
 	bot.Key.Debug = true
 	updateConfig := tgbotapi.NewUpdate(0)
@@ -113,6 +120,10 @@ func (bot *BotAPI) GetUpdates() <-chan tgbotapi.Update {
 	return updates
 }
 
+func (bot *BotAPI) ShowLocationKeyboard(chatID int64, text string) {
+	bot.ReplyMarkup(chatID, text, []tgbotapi.KeyboardButton{locationButton, closeButton})
+}
+
 func (bot *BotAPI) inBackgroundMessage(chatID int64, result WeatherAPI, client *ClientConnection) {
 	ticker := time.NewTicker(1 * time.Minute)
 
@@ -120,17 +131,11 @@ func (bot *BotAPI) inBackgroundMessage(chatID int64, result WeatherAPI, client *
 		for {
 			select {
 			case <-ticker.C:
-				fmt.Println("enter")
-				fmt.Println(time.Now().Format("15:04"))
-				existence, _ := client.findUser("time", time.Now().Format("15:04"))
-
-				if existence == true {
+				foundUser := client.findUser("time", time.Now().Format("15:04"))
+				if foundUser != nil {
 					res := result.RequestResult()
 					bot.SendMessage(chatID, res)
-				} else {
-					fmt.Println("no!!!")
 				}
-
 			}
 		}
 	}()
@@ -142,7 +147,7 @@ func (bot *BotAPI) isValidMessage(message string) bool {
 
 }
 
-func (bot *BotAPI) getTimeFromString(chatID int64, message string) (time.Time, bool) {
+func (bot *BotAPI) getTimeFromString(message string) (time.Time, bool) {
 
 	timeResult, err := time.Parse("15:04", message)
 	if err != nil {
