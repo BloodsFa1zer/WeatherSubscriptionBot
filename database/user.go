@@ -1,7 +1,8 @@
-package main
+package database
 
 import (
 	"context"
+	"example.com/mod/config"
 	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -20,7 +21,7 @@ type ClientConnection struct {
 	collection *mongo.Collection
 }
 
-func newConnection(config Config) *ClientConnection {
+func NewConnection(config config.Config) *ClientConnection {
 	ctx := context.TODO()
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(config.URI_BD))
 	if err != nil {
@@ -33,7 +34,7 @@ func newConnection(config Config) *ClientConnection {
 	return &clientConn
 }
 
-func (cl *ClientConnection) findUser(field string, dataToFind any) *User {
+func (cl *ClientConnection) FindUser(field string, dataToFind any) *User {
 
 	result := cl.collection.FindOne(context.TODO(), bson.M{field: dataToFind})
 
@@ -56,7 +57,7 @@ func (cl *ClientConnection) findUser(field string, dataToFind any) *User {
 	return &user
 }
 
-func (cl *ClientConnection) createUser(user User) {
+func (cl *ClientConnection) CreateUser(user User) {
 	userInfo := bson.D{{"UserID", user.UserID}, {"link", user.Link}, {"time", user.SendTime}}
 	_, err := cl.collection.InsertOne(context.TODO(), userInfo)
 	if err != nil {
@@ -66,7 +67,7 @@ func (cl *ClientConnection) createUser(user User) {
 	log.Info().Msg("successfully insert user`s data")
 }
 
-func (cl *ClientConnection) updateUser(id *primitive.ObjectID, user User) {
+func (cl *ClientConnection) UpdateUser(id *primitive.ObjectID, user User) {
 
 	update := bson.M{"$set": bson.M{"UserID": user.UserID, "link": user.Link, "time": user.SendTime}}
 	_, err := cl.collection.UpdateByID(context.Background(), id, update)

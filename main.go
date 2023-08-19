@@ -1,22 +1,24 @@
 package main
 
 import (
+	"example.com/mod/config"
+	"example.com/mod/database"
+	"example.com/mod/request"
+	"example.com/mod/telegram"
 	"fmt"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"time"
 )
 
-var timeFormat = "15:45"
-
 func main() {
 	zerolog.TimeFieldFormat = time.TimeOnly
 
-	cfg := LoadENV(".env")
+	cfg := config.LoadENV(".env")
 	cfg.ParseENV()
 
 	urlWeatherAPI := []byte(cfg.URL)
-	bot := NewBotAPI(*cfg)
+	bot := telegram.NewBotAPI(*cfg)
 
 	APIKey := cfg.APIKey
 
@@ -26,7 +28,7 @@ func main() {
 	numberOfIterations := 0
 	number := 0
 
-	client := newConnection(*cfg)
+	client := database.NewConnection(*cfg)
 
 	var lastUpdateID int
 
@@ -44,7 +46,7 @@ func main() {
 		userID := update.Message.From.ID
 		chatID := update.Message.Chat.ID
 
-		foundUser := client.findUser("UserID", userID)
+		foundUser := client.FindUser("UserID", userID)
 		// isUserExist == true so the item with the same data exists
 		// false if not
 
@@ -57,7 +59,7 @@ func main() {
 		switch update.Message.Text {
 		case "/start":
 			if foundUser == nil {
-				bot.ShowLocationKeyboard(chatID, startMessage)
+				bot.ShowLocationKeyboard(chatID, telegram.StartMessage)
 				log.Info().Msg("User gets msg")
 			}
 			break
@@ -81,22 +83,22 @@ func main() {
 
 		}
 
-		if unit, ok := units[update.Message.Text]; ok {
+		if unit, ok := request.Units[update.Message.Text]; ok {
 			urlWeatherAPI = fmt.Appendf(urlWeatherAPI, "lat=%f&lon=%f&appid=%s&units=%s", latitude, longitude, APIKey, unit)
 			bot.RemoveKeyboard(chatID, "Closing the reply keyboard.")
-			bot.SendMessage(chatID, timeMessage)
+			bot.SendMessage(chatID, telegram.TimeMessage)
 			checkTime = true
 			number = 0
-		} else if checkTime == true && bot.isValidMessage(update.Message.Text) == true {
-			timeResult, checkTimeFormat := bot.getTimeFromString(update.Message.Text)
+		} else if checkTime == true && bot.IsValidMessage(update.Message.Text) == true {
+			timeResult, checkTimeFormat := bot.GetTimeFromString(update.Message.Text)
 			if checkTimeFormat == true {
 				res := timeResult.Format("15:04")
 				WeatherResponse := string(urlWeatherAPI)
-				weather := WeatherAPI{
+				weather := request.WeatherAPI{
 					WeatherURL: WeatherResponse,
 				}
 
-				user := User{
+				user := database.User{
 					UserID:   userID,
 					Link:     WeatherResponse,
 					SendTime: res,
@@ -104,11 +106,11 @@ func main() {
 
 				result := ""
 				if foundUser != nil {
-					client.createUser(user)
+					client.CreateUser(user)
 					bot.SendMessage(chatID, "Your location and info are <b>successfully added</b>")
 
 				} else {
-					client.updateUser(&foundUser.ID, user)
+					client.UpdateUser(&foundUser.ID, user)
 					bot.SendMessage(chatID, "Your location and info are <b>successfully updated</b>")
 				}
 
@@ -116,16 +118,16 @@ func main() {
 				result = weather.RequestResult()
 				fmt.Println(WeatherResponse)
 				bot.SendMessage(chatID, result)
-				go bot.inBackgroundMessage(chatID, weather, client)
+				go bot.InBackgroundMessage(chatID, weather, client)
 				urlWeatherAPI = []byte(cfg.URL)
 				select {}
 			} else {
-				bot.SendMessage(chatID, timeMessage)
+				bot.SendMessage(chatID, telegram.TimeMessage)
 				continue
 			}
 
 		} else if number != 0 && checkTime == true {
-			bot.SendMessage(chatID, timeMessage)
+			bot.SendMessage(chatID, telegram.TimeMessage)
 		}
 
 	}

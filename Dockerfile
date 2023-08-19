@@ -24,7 +24,7 @@ FROM alpine:latest
 RUN mkdir /data
 
 COPY --from=dev-env /server ./
-COPY .env .env
+COPY config/.env .env
 
 CMD ["./server"]
 

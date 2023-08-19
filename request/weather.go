@@ -1,4 +1,4 @@
-package main
+package request
 
 import (
 	"encoding/json"
@@ -22,7 +22,7 @@ type WeatherData struct {
 	} `json:"wind"`
 }
 
-var units = map[string]string{
+var Units = map[string]string{
 	"Fahrenheit":      "imperial",
 	"Celsius":         "metric",
 	"Kelvin(default)": "standard",

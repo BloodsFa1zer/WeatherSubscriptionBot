@@ -1,18 +1,21 @@
-package main
+package telegram
 
 import (
+	"example.com/mod/config"
+	"example.com/mod/database"
+	"example.com/mod/request"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/rs/zerolog/log"
 	"regexp"
 	"time"
 )
 
-var startMessage = "Hello! If you want to proceed, share <u>your location</u> with bot so it can provide you with" +
+var StartMessage = "Hello! If you want to proceed, share <u>your location</u> with bot so it can provide you with" +
 	" <b>weather data according to your region.</b>"
 
-var unitsMessage = "Choose in which units you need to see weather info:"
+var UnitsMessage = "Choose in which units you need to see weather info:"
 
-var timeMessage = "You need to enter time when the daily weather update will be sent, that is correspond with given example " + timeFormat
+var TimeMessage = "You need to enter time when the daily weather update will be sent, that is correspond with given example: 15:45"
 
 var subscriptionKeyboard = tgbotapi.NewReplyKeyboard(
 	tgbotapi.NewKeyboardButtonRow(
@@ -36,7 +39,7 @@ type BotAPI struct {
 	Key *tgbotapi.BotAPI
 }
 
-func NewBotAPI(config Config) *BotAPI {
+func NewBotAPI(config config.Config) *BotAPI {
 	key, err := tgbotapi.NewBotAPI(config.BotAPI)
 	if err != nil {
 		log.Panic().Err(err).Msg(" Bot API problem")
@@ -107,7 +110,7 @@ func (bot *BotAPI) ReplySubscriptionMarkup(chatID int64, text string) {
 }
 
 func (bot *BotAPI) CreateUnitsKeyboard(chatID int64) {
-	bot.createKeyboard(chatID, len(units)+1, units, unitsMessage)
+	bot.createKeyboard(chatID, len(request.Units)+1, request.Units, UnitsMessage)
 }
 
 func (bot *BotAPI) GetUpdates() <-chan tgbotapi.Update {
@@ -124,14 +127,14 @@ func (bot *BotAPI) ShowLocationKeyboard(chatID int64, text string) {
 	bot.ReplyMarkup(chatID, text, []tgbotapi.KeyboardButton{locationButton, closeButton})
 }
 
-func (bot *BotAPI) inBackgroundMessage(chatID int64, result WeatherAPI, client *ClientConnection) {
+func (bot *BotAPI) InBackgroundMessage(chatID int64, result request.WeatherAPI, client *database.ClientConnection) {
 	ticker := time.NewTicker(1 * time.Minute)
 
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
-				foundUser := client.findUser("time", time.Now().Format("15:04"))
+				foundUser := client.FindUser("time", time.Now().Format("15:04"))
 				if foundUser != nil {
 					res := result.RequestResult()
 					bot.SendMessage(chatID, res)
@@ -141,13 +144,13 @@ func (bot *BotAPI) inBackgroundMessage(chatID int64, result WeatherAPI, client *
 	}()
 }
 
-func (bot *BotAPI) isValidMessage(message string) bool {
+func (bot *BotAPI) IsValidMessage(message string) bool {
 	timePattern := regexp.MustCompile(`^\d{2}:\d{2}$`)
 	return timePattern.MatchString(message)
 
 }
 
-func (bot *BotAPI) getTimeFromString(message string) (time.Time, bool) {
+func (bot *BotAPI) GetTimeFromString(message string) (time.Time, bool) {
 
 	timeResult, err := time.Parse("15:04", message)
 	if err != nil {
